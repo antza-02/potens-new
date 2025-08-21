@@ -28,6 +28,13 @@ vercel
 3. Upload the project folder
 4. Deploy!
 
+## 🔄 Automatic Deployments
+
+This project is connected to GitHub for automatic deployments:
+- Every push to `main` branch triggers a production deployment
+- Pull requests create preview deployments
+- No manual deployment needed!
+
 ## 🛠️ Local Development
 
 ```bash
