@@ -216,7 +216,7 @@ function AppContent() {
                   >
                     {t.bookings}
                   </Button>
-                  {user.user_metadata?.role === 'admin' && (
+                                       {(user.user_metadata?.role === 'admin' || user.email === 'admin@potens.fi') && (
                     <Button
                       variant="outline"
                       onClick={() => setCurrentView('admin-dashboard')}
@@ -275,18 +275,18 @@ function AppContent() {
                     >
                       {t.bookings}
                     </Button>
-                    {user.user_metadata?.role === 'admin' && (
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          setCurrentView('admin-dashboard');
-                          setShowMobileMenu(false);
-                        }}
-                        className="justify-start"
-                      >
-                        {t.admin}
-                      </Button>
-                    )}
+                                         {(user.user_metadata?.role === 'admin' || user.email === 'admin@potens.fi') && (
+                       <Button
+                         variant="outline"
+                         onClick={() => {
+                           setCurrentView('admin-dashboard');
+                           setShowMobileMenu(false);
+                         }}
+                         className="justify-start"
+                       >
+                         {t.admin}
+                       </Button>
+                     )}
                     <Button
                       variant="outline"
                       onClick={() => {
