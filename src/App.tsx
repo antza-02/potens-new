@@ -9,6 +9,7 @@ import VenueDetail from './components/VenueDetail';
 import BookingFlow from './components/BookingFlow';
 import UserDashboard from './components/UserDashboard';
 import AdminDashboard from './components/AdminDashboard';
+import SuperAdminDashboard from './components/SuperAdminDashboard';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { LoginForm } from './components/auth/LoginForm';
 import { SignUpForm } from './components/auth/SignUpForm';
@@ -188,6 +189,15 @@ function AppContent() {
     );
   }
 
+  if (currentView === 'super-admin-dashboard') {
+    return (
+      <SuperAdminDashboard
+        onBack={() => setCurrentView('home')}
+        language={language}
+      />
+    );
+  }
+
   // Main app layout
   return (
     <div className="min-h-screen bg-gray-50">
@@ -216,14 +226,22 @@ function AppContent() {
                   >
                     {t.bookings}
                   </Button>
-                                       {(user.user_metadata?.role === 'admin' || user.email === 'admin@potens.fi') && (
-                    <Button
-                      variant="outline"
-                      onClick={() => setCurrentView('admin-dashboard')}
-                    >
-                      {t.admin}
-                    </Button>
-                  )}
+                                                          {(user.user_metadata?.role === 'admin' || user.email === 'admin@potens.fi') && (
+                     <Button
+                       variant="outline"
+                       onClick={() => setCurrentView('admin-dashboard')}
+                     >
+                       {t.admin}
+                     </Button>
+                   )}
+                   {(user.user_metadata?.role === 'super_admin' || user.email === 'superadmin@potens.fi') && (
+                     <Button
+                       variant="outline"
+                       onClick={() => setCurrentView('super-admin-dashboard')}
+                     >
+                       Super Admin
+                     </Button>
+                   )}
                   <Button
                     variant="outline"
                     onClick={handleLogout}
@@ -285,6 +303,18 @@ function AppContent() {
                          className="justify-start"
                        >
                          {t.admin}
+                       </Button>
+                     )}
+                     {(user.user_metadata?.role === 'super_admin' || user.email === 'superadmin@potens.fi') && (
+                       <Button
+                         variant="outline"
+                         onClick={() => {
+                           setCurrentView('super-admin-dashboard');
+                           setShowMobileMenu(false);
+                         }}
+                         className="justify-start"
+                       >
+                         Super Admin
                        </Button>
                      )}
                     <Button

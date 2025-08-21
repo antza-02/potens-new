@@ -11,6 +11,8 @@ CREATE TABLE venues (
   amenities TEXT[] DEFAULT '{}',
   capacity INTEGER NOT NULL,
   description TEXT NOT NULL,
+  owner_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  is_active BOOLEAN DEFAULT true,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -28,37 +30,61 @@ CREATE TABLE bookings (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Create profiles table for user data
+-- Create profiles table for user data with enhanced roles
 CREATE TABLE profiles (
   id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
   full_name VARCHAR(255),
-  role VARCHAR(20) DEFAULT 'user' CHECK (role IN ('user', 'admin')),
+  role VARCHAR(20) DEFAULT 'user' CHECK (role IN ('user', 'city_owner', 'super_admin')),
+  city VARCHAR(100),
+  phone VARCHAR(20),
+  is_active BOOLEAN DEFAULT true,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create user activity log table
+CREATE TABLE user_activity_log (
+  id BIGSERIAL PRIMARY KEY,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  action VARCHAR(100) NOT NULL,
+  details JSONB,
+  ip_address INET,
+  user_agent TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Enable Row Level Security
 ALTER TABLE venues ENABLE ROW LEVEL SECURITY;
 ALTER TABLE bookings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_activity_log ENABLE ROW LEVEL SECURITY;
 
--- Venues policies (public read, admin write)
+-- Venues policies
 CREATE POLICY "Venues are viewable by everyone" ON venues
-  FOR SELECT USING (true);
+  FOR SELECT USING (is_active = true);
 
-CREATE POLICY "Venues are insertable by admin" ON venues
+CREATE POLICY "Venues are insertable by city owners and super admins" ON venues
   FOR INSERT WITH CHECK (
     EXISTS (
       SELECT 1 FROM profiles
-      WHERE profiles.id = auth.uid() AND profiles.role = 'admin'
+      WHERE profiles.id = auth.uid() AND profiles.role IN ('city_owner', 'super_admin')
     )
   );
 
-CREATE POLICY "Venues are updatable by admin" ON venues
+CREATE POLICY "Venues are updatable by owners and super admins" ON venues
   FOR UPDATE USING (
+    owner_id = auth.uid() OR
     EXISTS (
       SELECT 1 FROM profiles
-      WHERE profiles.id = auth.uid() AND profiles.role = 'admin'
+      WHERE profiles.id = auth.uid() AND profiles.role = 'super_admin'
+    )
+  );
+
+CREATE POLICY "Venues are deletable by super admins only" ON venues
+  FOR DELETE USING (
+    EXISTS (
+      SELECT 1 FROM profiles
+      WHERE profiles.id = auth.uid() AND profiles.role = 'super_admin'
     )
   );
 
@@ -66,11 +92,22 @@ CREATE POLICY "Venues are updatable by admin" ON venues
 CREATE POLICY "Users can view their own bookings" ON bookings
   FOR SELECT USING (auth.uid() = user_id);
 
-CREATE POLICY "Admins can view all bookings" ON bookings
+CREATE POLICY "City owners can view bookings for their venues" ON bookings
+  FOR SELECT USING (
+    EXISTS (
+      SELECT 1 FROM venues v
+      JOIN profiles p ON p.id = auth.uid()
+      WHERE v.id = bookings.venue_id 
+      AND p.role = 'city_owner' 
+      AND v.owner_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Super admins can view all bookings" ON bookings
   FOR SELECT USING (
     EXISTS (
       SELECT 1 FROM profiles
-      WHERE profiles.id = auth.uid() AND profiles.role = 'admin'
+      WHERE profiles.id = auth.uid() AND profiles.role = 'super_admin'
     )
   );
 
@@ -80,11 +117,11 @@ CREATE POLICY "Users can create their own bookings" ON bookings
 CREATE POLICY "Users can update their own bookings" ON bookings
   FOR UPDATE USING (auth.uid() = user_id);
 
-CREATE POLICY "Admins can update any booking" ON bookings
+CREATE POLICY "Super admins can update any booking" ON bookings
   FOR UPDATE USING (
     EXISTS (
       SELECT 1 FROM profiles
-      WHERE profiles.id = auth.uid() AND profiles.role = 'admin'
+      WHERE profiles.id = auth.uid() AND profiles.role = 'super_admin'
     )
   );
 
@@ -92,8 +129,39 @@ CREATE POLICY "Admins can update any booking" ON bookings
 CREATE POLICY "Users can view their own profile" ON profiles
   FOR SELECT USING (auth.uid() = id);
 
+CREATE POLICY "Super admins can view all profiles" ON profiles
+  FOR SELECT USING (
+    EXISTS (
+      SELECT 1 FROM profiles p
+      WHERE p.id = auth.uid() AND p.role = 'super_admin'
+    )
+  );
+
 CREATE POLICY "Users can update their own profile" ON profiles
   FOR UPDATE USING (auth.uid() = id);
+
+CREATE POLICY "Super admins can update any profile" ON profiles
+  FOR UPDATE USING (
+    EXISTS (
+      SELECT 1 FROM profiles p
+      WHERE p.id = auth.uid() AND p.role = 'super_admin'
+    )
+  );
+
+-- User activity log policies
+CREATE POLICY "Users can view their own activity" ON user_activity_log
+  FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Super admins can view all activity" ON user_activity_log
+  FOR SELECT USING (
+    EXISTS (
+      SELECT 1 FROM profiles
+      WHERE profiles.id = auth.uid() AND profiles.role = 'super_admin'
+    )
+  );
+
+CREATE POLICY "System can insert activity logs" ON user_activity_log
+  FOR INSERT WITH CHECK (true);
 
 -- Insert sample venues data
 INSERT INTO venues (name, type, city, price, rating, reviews, image, amenities, capacity, description) VALUES
@@ -137,3 +205,16 @@ CREATE TRIGGER update_bookings_updated_at BEFORE UPDATE ON bookings
 
 CREATE TRIGGER update_profiles_updated_at BEFORE UPDATE ON profiles
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Create function to log user activity
+CREATE OR REPLACE FUNCTION log_user_activity(
+  user_id UUID,
+  action TEXT,
+  details JSONB DEFAULT NULL
+)
+RETURNS VOID AS $$
+BEGIN
+  INSERT INTO user_activity_log (user_id, action, details)
+  VALUES (user_id, action, details);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;

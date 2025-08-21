@@ -18,6 +18,8 @@ export interface Venue {
   amenities: string[]
   capacity: number
   description: string
+  owner_id?: string
+  is_active: boolean
   created_at: string
   updated_at: string
 }
@@ -38,6 +40,22 @@ export interface User {
   id: string
   email: string
   full_name: string
-  role: 'user' | 'admin'
+  role: 'user' | 'city_owner' | 'super_admin'
+  city?: string
+  phone?: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface UserActivityLog {
+  id: number
+  user_id: string
+  action: string
+  details?: any
+  ip_address?: string
+  user_agent?: string
   created_at: string
 }
+
+export type UserRole = 'user' | 'city_owner' | 'super_admin'
