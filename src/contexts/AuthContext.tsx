@@ -55,7 +55,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }
 
   const signUp = async (email: string, password: string, fullName: string) => {
-    const { error } = await supabase.auth.signUp({
+    console.log('Attempting to sign up:', { email, fullName });
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -64,6 +65,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         },
       },
     })
+    console.log('Sign up result:', { data, error });
     return { error }
   }
 
