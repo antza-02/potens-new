@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Search, MapPin, Calendar, Users, Star, Heart, Menu, Globe } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Search, MapPin, Calendar, Users, Star, Heart, Menu, Globe, LogOut, User } from 'lucide-react';
 import { Button } from './components/ui/button';
 import { Input } from './components/ui/input';
 import { Card, CardContent, CardFooter } from './components/ui/card';
@@ -9,74 +9,26 @@ import VenueDetail from './components/VenueDetail';
 import BookingFlow from './components/BookingFlow';
 import UserDashboard from './components/UserDashboard';
 import AdminDashboard from './components/AdminDashboard';
-
-// Mock data
-const featuredVenues = [
-  {
-    id: 1,
-    name: "Keskuspuiston Sauna",
-    type: "Sauna",
-    city: "Helsinki",
-    price: 25,
-    rating: 4.8,
-    reviews: 124,
-    image: "helsinki sauna wooden interior",
-    amenities: ["Towels provided", "Changing room", "Shower"],
-    capacity: 8,
-    description: "Traditional Finnish sauna in the heart of Central Park"
-  },
-  {
-    id: 2,
-    name: "Kaupungintalon Kokoushuone",
-    type: "Meeting Room",
-    city: "Tampere",
-    price: 45,
-    rating: 4.6,
-    reviews: 89,
-    image: "modern meeting room finland",
-    amenities: ["Projector", "WiFi", "Whiteboard", "Coffee machine"],
-    capacity: 12,
-    description: "Modern meeting room with all necessary equipment"
-  },
-  {
-    id: 3,
-    name: "Urheilupuiston Tenniskenttä",
-    type: "Tennis Court",
-    city: "Turku",
-    price: 35,
-    rating: 4.7,
-    reviews: 156,
-    image: "tennis court outdoor finland",
-    amenities: ["Equipment rental", "Lighting", "Seating area"],
-    capacity: 4,
-    description: "Professional outdoor tennis court with evening lighting"
-  },
-  {
-    id: 4,
-    name: "Kulttuuritalon Studiotila",
-    type: "Creative Space",
-    city: "Oulu",
-    price: 30,
-    rating: 4.9,
-    reviews: 67,
-    image: "creative studio space finland",
-    amenities: ["Sound system", "Mirrors", "Storage", "Piano"],
-    capacity: 20,
-    description: "Versatile creative space perfect for workshops and events"
-  }
-];
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { LoginForm } from './components/auth/LoginForm';
+import { SignUpForm } from './components/auth/SignUpForm';
+import { getVenues, searchVenues, Venue } from './lib/database';
 
 const cities = ["Helsinki", "Tampere", "Turku", "Oulu", "Espoo", "Vantaa"];
 const spaceTypes = ["Sauna", "Meeting Room", "Tennis Court", "Creative Space", "Sports Hall", "Conference Room"];
 
-export default function App() {
+function AppContent() {
+  const { user, loading, signOut } = useAuth();
   const [currentView, setCurrentView] = useState('home');
-  const [selectedVenue, setSelectedVenue] = useState(null);
+  const [selectedVenue, setSelectedVenue] = useState<Venue | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCity, setSelectedCity] = useState('');
   const [selectedType, setSelectedType] = useState('');
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [language, setLanguage] = useState('fi');
+  const [showAuth, setShowAuth] = useState<'login' | 'signup' | null>(null);
+  const [venues, setVenues] = useState<Venue[]>([]);
+  const [loadingVenues, setLoadingVenues] = useState(true);
 
   const translations = {
     fi: {
@@ -91,7 +43,10 @@ export default function App() {
       home: "Etusivu",
       bookings: "Varaukseni",
       admin: "Hallinta",
-      menu: "Valikko"
+      menu: "Valikko",
+      login: "Kirjaudu",
+      logout: "Kirjaudu ulos",
+      profile: "Profiili"
     },
     en: {
       searchPlaceholder: "Search spaces, saunas, courts...",
@@ -105,60 +60,135 @@ export default function App() {
       home: "Home",
       bookings: "My Bookings",
       admin: "Admin",
-      menu: "Menu"
+      menu: "Menu",
+      login: "Login",
+      logout: "Logout",
+      profile: "Profile"
     }
   };
 
-  const t = translations[language];
+  const t = translations[language as keyof typeof translations];
 
-  const filteredVenues = featuredVenues.filter(venue => {
-    const matchesSearch = venue.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         venue.type.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCity = !selectedCity || venue.city === selectedCity;
-    const matchesType = !selectedType || venue.type === selectedType;
-    return matchesSearch && matchesCity && matchesType;
-  });
+  // Load venues from database
+  useEffect(() => {
+    const loadVenues = async () => {
+      setLoadingVenues(true);
+      try {
+        const venuesData = await getVenues();
+        setVenues(venuesData);
+      } catch (error) {
+        console.error('Error loading venues:', error);
+      } finally {
+        setLoadingVenues(false);
+      }
+    };
 
-  const handleVenueClick = (venue) => {
+    loadVenues();
+  }, []);
+
+  // Handle search
+  const handleSearch = async () => {
+    setLoadingVenues(true);
+    try {
+      const searchResults = await searchVenues(searchQuery, selectedCity || undefined, selectedType || undefined);
+      setVenues(searchResults);
+    } catch (error) {
+      console.error('Error searching venues:', error);
+    } finally {
+      setLoadingVenues(false);
+    }
+  };
+
+  // Handle venue selection
+  const handleVenueClick = (venue: Venue) => {
     setSelectedVenue(venue);
-    setCurrentView('venue');
+    setCurrentView('venue-detail');
   };
 
-  const toggleLanguage = () => {
-    setLanguage(language === 'fi' ? 'en' : 'fi');
+  // Handle logout
+  const handleLogout = async () => {
+    await signOut();
+    setCurrentView('home');
   };
 
-  if (currentView === 'venue' && selectedVenue) {
-    return <VenueDetail 
-      venue={selectedVenue} 
-      onBack={() => setCurrentView('home')} 
-      onBook={() => setCurrentView('booking')}
-      language={language}
-    />;
+  // Show loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Ladataan...</p>
+        </div>
+      </div>
+    );
   }
 
-  if (currentView === 'booking') {
-    return <BookingFlow 
-      venue={selectedVenue} 
-      onBack={() => setCurrentView('venue')}
-      language={language}
-    />;
+  // Show authentication forms
+  if (showAuth) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="w-full max-w-md">
+          {showAuth === 'login' ? (
+            <LoginForm onSwitchToSignUp={() => setShowAuth('signup')} />
+          ) : (
+            <SignUpForm onSwitchToLogin={() => setShowAuth('login')} />
+          )}
+          <div className="mt-4 text-center">
+            <Button
+              variant="outline"
+              onClick={() => setShowAuth(null)}
+              className="w-full"
+            >
+              Takaisin sovellukseen
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
-  if (currentView === 'dashboard') {
-    return <UserDashboard 
-      onBack={() => setCurrentView('home')}
-      language={language}
-    />;
+  // Show specific views
+  if (currentView === 'venue-detail' && selectedVenue) {
+    return (
+      <VenueDetail
+        venue={selectedVenue}
+        onBack={() => setCurrentView('home')}
+        onBook={() => setCurrentView('booking')}
+        language={language}
+      />
+    );
   }
 
-  if (currentView === 'admin') {
-    return <AdminDashboard 
-      onBack={() => setCurrentView('home')}
-      language={language}
-    />;
+  if (currentView === 'booking' && selectedVenue) {
+    return (
+      <BookingFlow
+        venue={selectedVenue}
+        onBack={() => setCurrentView('venue-detail')}
+        onComplete={() => setCurrentView('user-dashboard')}
+        language={language}
+      />
+    );
   }
 
+  if (currentView === 'user-dashboard') {
+    return (
+      <UserDashboard
+        onBack={() => setCurrentView('home')}
+        language={language}
+      />
+    );
+  }
+
+  if (currentView === 'admin-dashboard') {
+    return (
+      <AdminDashboard
+        onBack={() => setCurrentView('home')}
+        language={language}
+      />
+    );
+  }
+
+  // Main app layout
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -166,181 +196,218 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
-              <h1 className="text-2xl text-pink-600 mr-8">Potens</h1>
-              
-              {/* Desktop Navigation */}
-              <nav className="hidden md:flex space-x-8">
-                <button 
-                  onClick={() => setCurrentView('home')}
-                  className={`${currentView === 'home' ? 'text-pink-600' : 'text-gray-700'} hover:text-pink-600`}
-                >
-                  {t.home}
-                </button>
-                <button 
-                  onClick={() => setCurrentView('dashboard')}
-                  className={`${currentView === 'dashboard' ? 'text-pink-600' : 'text-gray-700'} hover:text-pink-600`}
-                >
-                  {t.bookings}
-                </button>
-                <button 
-                  onClick={() => setCurrentView('admin')}
-                  className={`${currentView === 'admin' ? 'text-pink-600' : 'text-gray-700'} hover:text-pink-600`}
-                >
-                  {t.admin}
-                </button>
-              </nav>
+              <h1 className="text-xl font-bold text-gray-900">Potens</h1>
             </div>
-
-            <div className="flex items-center space-x-4">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={toggleLanguage}
-                className="flex items-center space-x-1"
+            
+            <div className="hidden md:flex items-center space-x-4">
+              <button
+                onClick={() => setLanguage(language === 'fi' ? 'en' : 'fi')}
+                className="flex items-center space-x-1 text-gray-600 hover:text-gray-900"
               >
                 <Globe className="h-4 w-4" />
-                <span>{language.toUpperCase()}</span>
-              </Button>
-
-              {/* Mobile menu button */}
-              <button
-                onClick={() => setShowMobileMenu(!showMobileMenu)}
-                className="md:hidden p-2"
-              >
-                <Menu className="h-6 w-6" />
+                <span>{language === 'fi' ? 'EN' : 'FI'}</span>
               </button>
+              
+              {user ? (
+                <div className="flex items-center space-x-4">
+                  <Button
+                    variant="outline"
+                    onClick={() => setCurrentView('user-dashboard')}
+                  >
+                    {t.bookings}
+                  </Button>
+                  {user.user_metadata?.role === 'admin' && (
+                    <Button
+                      variant="outline"
+                      onClick={() => setCurrentView('admin-dashboard')}
+                    >
+                      {t.admin}
+                    </Button>
+                  )}
+                  <Button
+                    variant="outline"
+                    onClick={handleLogout}
+                    className="flex items-center space-x-1"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    <span>{t.logout}</span>
+                  </Button>
+                </div>
+              ) : (
+                <Button onClick={() => setShowAuth('login')}>
+                  {t.login}
+                </Button>
+              )}
+            </div>
+
+            {/* Mobile menu button */}
+            <div className="md:hidden">
+              <Button
+                variant="outline"
+                onClick={() => setShowMobileMenu(!showMobileMenu)}
+              >
+                <Menu className="h-4 w-4" />
+              </Button>
             </div>
           </div>
 
-          {/* Mobile Navigation */}
+          {/* Mobile menu */}
           {showMobileMenu && (
             <div className="md:hidden py-4 border-t">
               <div className="flex flex-col space-y-2">
-                <button 
-                  onClick={() => {setCurrentView('home'); setShowMobileMenu(false);}}
-                  className={`text-left py-2 ${currentView === 'home' ? 'text-pink-600' : 'text-gray-700'}`}
+                <button
+                  onClick={() => setLanguage(language === 'fi' ? 'en' : 'fi')}
+                  className="flex items-center space-x-1 text-gray-600 hover:text-gray-900 px-4 py-2"
                 >
-                  {t.home}
+                  <Globe className="h-4 w-4" />
+                  <span>{language === 'fi' ? 'EN' : 'FI'}</span>
                 </button>
-                <button 
-                  onClick={() => {setCurrentView('dashboard'); setShowMobileMenu(false);}}
-                  className={`text-left py-2 ${currentView === 'dashboard' ? 'text-pink-600' : 'text-gray-700'}`}
-                >
-                  {t.bookings}
-                </button>
-                <button 
-                  onClick={() => {setCurrentView('admin'); setShowMobileMenu(false);}}
-                  className={`text-left py-2 ${currentView === 'admin' ? 'text-pink-600' : 'text-gray-700'}`}
-                >
-                  {t.admin}
-                </button>
+                
+                {user ? (
+                  <>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setCurrentView('user-dashboard');
+                        setShowMobileMenu(false);
+                      }}
+                      className="justify-start"
+                    >
+                      {t.bookings}
+                    </Button>
+                    {user.user_metadata?.role === 'admin' && (
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setCurrentView('admin-dashboard');
+                          setShowMobileMenu(false);
+                        }}
+                        className="justify-start"
+                      >
+                        {t.admin}
+                      </Button>
+                    )}
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        handleLogout();
+                        setShowMobileMenu(false);
+                      }}
+                      className="justify-start"
+                    >
+                      {t.logout}
+                    </Button>
+                  </>
+                ) : (
+                  <Button
+                    onClick={() => {
+                      setShowAuth('login');
+                      setShowMobileMenu(false);
+                    }}
+                  >
+                    {t.login}
+                  </Button>
+                )}
               </div>
             </div>
           )}
         </div>
       </header>
 
-      {/* Hero Section with Search */}
-      <section className="bg-gradient-to-br from-pink-50 to-rose-100 py-12 lg:py-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h1 className="text-4xl lg:text-6xl text-gray-900 mb-6">
-            {language === 'fi' ? 'Varaa julkisia tiloja helposti' : 'Book public spaces easily'}
-          </h1>
-          <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
-            {language === 'fi' 
-              ? 'Löydä ja varaa saunoja, kokoushuoneita, urheilutiloja ja muita julkisia tiloja kaupungeista ympäri Suomen'
-              : 'Find and book saunas, meeting rooms, sports facilities and other public spaces from cities across Finland'
-            }
-          </p>
-
-          {/* Search Bar */}
-          <div className="max-w-4xl mx-auto">
-            <div className="bg-white rounded-lg shadow-lg p-4 lg:p-6">
-              <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-                <div className="lg:col-span-2">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
-                    <Input
-                      placeholder={t.searchPlaceholder}
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-10 h-12 border-gray-200 focus:border-pink-500"
-                    />
-                  </div>
-                </div>
-                
-                <div>
-                  <select 
-                    value={selectedCity}
-                    onChange={(e) => setSelectedCity(e.target.value)}
-                    className="w-full h-12 px-3 border border-gray-200 rounded-md focus:border-pink-500 focus:outline-none"
-                  >
-                    <option value="">{t.anyCity}</option>
-                    {cities.map(city => (
-                      <option key={city} value={city}>{city}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <select 
-                    value={selectedType}
-                    onChange={(e) => setSelectedType(e.target.value)}
-                    className="w-full h-12 px-3 border border-gray-200 rounded-md focus:border-pink-500 focus:outline-none"
-                  >
-                    <option value="">{t.anyType}</option>
-                    {spaceTypes.map(type => (
-                      <option key={type} value={type}>{type}</option>
-                    ))}
-                  </select>
-                </div>
+      {/* Main content */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Search section */}
+        <div className="mb-8">
+          <div className="bg-white rounded-lg shadow-sm p-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="md:col-span-2">
+                <Input
+                  placeholder={t.searchPlaceholder}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full"
+                />
               </div>
-              
-              <Button className="w-full lg:w-auto mt-4 lg:mt-6 h-12 px-8 bg-pink-600 hover:bg-pink-700">
-                <Search className="h-5 w-5 mr-2" />
+              <div>
+                <select
+                  value={selectedCity}
+                  onChange={(e) => setSelectedCity(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">{t.anyCity}</option>
+                  {cities.map(city => (
+                    <option key={city} value={city}>{city}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <select
+                  value={selectedType}
+                  onChange={(e) => setSelectedType(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">{t.anyType}</option>
+                  {spaceTypes.map(type => (
+                    <option key={type} value={type}>{type}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="mt-4">
+              <Button onClick={handleSearch} className="w-full md:w-auto">
+                <Search className="h-4 w-4 mr-2" />
                 {t.search}
               </Button>
             </div>
           </div>
         </div>
-      </section>
 
-      {/* Featured Spaces */}
-      <section className="py-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl text-gray-900 mb-8">{t.featuredSpaces}</h2>
+        {/* Venues grid */}
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-6">{t.featuredSpaces}</h2>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {filteredVenues.map((venue) => (
-              <VenueCard 
-                key={venue.id} 
-                venue={venue} 
-                onClick={() => handleVenueClick(venue)}
-                language={language}
-                t={t}
-              />
-            ))}
-          </div>
-
-          {filteredVenues.length === 0 && (
+          {loadingVenues ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {[...Array(8)].map((_, i) => (
+                <div key={i} className="bg-white rounded-lg shadow-sm p-4 animate-pulse">
+                  <div className="bg-gray-200 h-48 rounded-lg mb-4"></div>
+                  <div className="space-y-2">
+                    <div className="bg-gray-200 h-4 rounded"></div>
+                    <div className="bg-gray-200 h-4 rounded w-3/4"></div>
+                    <div className="bg-gray-200 h-4 rounded w-1/2"></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : venues.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {venues.map(venue => (
+                <VenueCard
+                  key={venue.id}
+                  venue={venue}
+                  onClick={() => handleVenueClick(venue)}
+                  language={language}
+                  t={t}
+                />
+              ))}
+            </div>
+          ) : (
             <div className="text-center py-12">
-              <p className="text-gray-500 text-lg">
-                {language === 'fi' ? 'Ei tuloksia hakuehdoillasi' : 'No results found for your search criteria'}
-              </p>
+              <p className="text-gray-500 text-lg">Ei tiloja löytynyt</p>
             </div>
           )}
         </div>
-      </section>
+      </main>
 
       {/* Footer */}
-      <footer className="bg-gray-900 text-white py-12">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <footer className="bg-gray-900 text-white mt-16">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
             <div>
-              <h3 className="text-xl mb-4">Potens</h3>
+              <h4 className="mb-4 font-semibold">Potens</h4>
               <p className="text-gray-400">
                 {language === 'fi' 
-                  ? 'Julkisten tilojen varauspalvelu Suomen kaupungeille'
+                  ? 'Suomalaisten kaupunkien julkisten tilojen varauspalvelu'
                   : 'Public space booking service for Finnish cities'
                 }
               </p>
@@ -386,7 +453,7 @@ export default function App() {
   );
 }
 
-function VenueCard({ venue, onClick, language, t }) {
+function VenueCard({ venue, onClick, language, t }: { venue: Venue; onClick: () => void; language: string; t: any }) {
   return (
     <Card className="group cursor-pointer hover:shadow-lg transition-shadow duration-300" onClick={onClick}>
       <div className="relative overflow-hidden rounded-t-lg">
@@ -445,5 +512,13 @@ function VenueCard({ venue, onClick, language, t }) {
         </div>
       </CardFooter>
     </Card>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }
