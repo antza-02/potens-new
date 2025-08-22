@@ -9,6 +9,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Alert, AlertDescription } from './ui/alert';
 import { getAllUsers, updateUserRole, updateUserStatus, getAllBookings, getUserActivityLogs, User, UserRole, Booking, UserActivityLog } from '../lib/database';
+import { deleteUserSimple, disableUserSimple, sendPasswordResetEmailSimple, logUserActivitySimple } from '../lib/database-simple';
+import { sendUserInvitationSimple, getPendingInvitations, getAllInvitations, resendInvitation } from '../lib/email-invitations-simple';
 
 interface SuperAdminDashboardProps {
   onBack: () => void;
@@ -16,7 +18,7 @@ interface SuperAdminDashboardProps {
 }
 
 export default function SuperAdminDashboard({ onBack, language }: SuperAdminDashboardProps) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'bookings' | 'activity'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'bookings' | 'activity' | 'invitations'>('overview');
   const [users, setUsers] = useState<User[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [activityLogs, setActivityLogs] = useState<UserActivityLog[]>([]);
@@ -25,6 +27,13 @@ export default function SuperAdminDashboard({ onBack, language }: SuperAdminDash
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [showUserDialog, setShowUserDialog] = useState(false);
+  const [showInviteDialog, setShowInviteDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [inviteForm, setInviteForm] = useState({ email: '', fullName: '', role: 'user' as UserRole });
+  const [actionLoading, setActionLoading] = useState(false);
+  const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [invitations, setInvitations] = useState<any[]>([]);
+  const [invitationsLoading, setInvitationsLoading] = useState(false);
 
   const translations = {
     fi: {
@@ -56,7 +65,23 @@ export default function SuperAdminDashboard({ onBack, language }: SuperAdminDash
       errorUpdating: 'Virhe päivitettäessä käyttäjää',
       noUsers: 'Ei käyttäjiä',
       noBookings: 'Ei varauksia',
-      noActivity: 'Ei aktiviteettia'
+      noActivity: 'Ei aktiviteettia',
+      inviteUser: 'Kutsu käyttäjä',
+      deleteUser: 'Poista käyttäjä',
+      disableUser: 'Poista käytöstä',
+      enableUser: 'Ota käyttöön',
+      sendPasswordReset: 'Lähetä salasanan palautus',
+      confirmDelete: 'Oletko varma, että haluat poistaa tämän käyttäjän? Tämä toiminto ei ole peruttavissa.',
+      userInvited: 'Käyttäjä kutsuttu onnistuneesti',
+      userDeleted: 'Käyttäjä poistettu onnistuneesti',
+      userDisabled: 'Käyttäjä poistettu käytöstä',
+      userEnabled: 'Käyttäjä otettu käyttöön',
+      passwordResetSent: 'Salasanan palautusviesti lähetetty',
+      email: 'Sähköposti',
+      fullName: 'Koko nimi',
+      selectRole: 'Valitse rooli',
+      invite: 'Kutsu',
+      cancel: 'Peruuta'
     },
     en: {
       title: 'Super Admin Dashboard',
@@ -87,7 +112,23 @@ export default function SuperAdminDashboard({ onBack, language }: SuperAdminDash
       errorUpdating: 'Error updating user',
       noUsers: 'No users found',
       noBookings: 'No bookings found',
-      noActivity: 'No activity found'
+      noActivity: 'No activity found',
+      inviteUser: 'Invite User',
+      deleteUser: 'Delete User',
+      disableUser: 'Disable User',
+      enableUser: 'Enable User',
+      sendPasswordReset: 'Send Password Reset',
+      confirmDelete: 'Are you sure you want to delete this user? This action cannot be undone.',
+      userInvited: 'User invited successfully',
+      userDeleted: 'User deleted successfully',
+      userDisabled: 'User disabled successfully',
+      userEnabled: 'User enabled successfully',
+      passwordResetSent: 'Password reset email sent',
+      email: 'Email',
+      fullName: 'Full Name',
+      selectRole: 'Select Role',
+      invite: 'Invite',
+      cancel: 'Cancel'
     }
   };
 
@@ -96,6 +137,12 @@ export default function SuperAdminDashboard({ onBack, language }: SuperAdminDash
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    if (activeTab === 'invitations') {
+      loadInvitations();
+    }
+  }, [activeTab]);
 
   const loadData = async () => {
     setLoading(true);
@@ -112,6 +159,19 @@ export default function SuperAdminDashboard({ onBack, language }: SuperAdminDash
       console.error('Error loading data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadInvitations = async () => {
+    setInvitationsLoading(true);
+    try {
+      const invitationsData = await getAllInvitations();
+      setInvitations(invitationsData);
+    } catch (error) {
+      console.error('Error loading invitations:', error);
+      setInvitations([]);
+    } finally {
+      setInvitationsLoading(false);
     }
   };
 
@@ -142,6 +202,105 @@ export default function SuperAdminDashboard({ onBack, language }: SuperAdminDash
       console.error('Error updating user status:', error);
     }
   };
+
+  const handleInviteUser = async () => {
+    if (!inviteForm.email || !inviteForm.fullName) {
+      setActionMessage({ type: 'error', message: 'Please fill in all fields' });
+      return;
+    }
+
+    setActionLoading(true);
+    try {
+      const result = await sendUserInvitationSimple(inviteForm.email, inviteForm.fullName, inviteForm.role);
+      if (result.success) {
+        if (result.error) {
+          // Partial success - invitation created but email failed
+          setActionMessage({ type: 'success', message: `Invitation created! User can sign up with email: ${inviteForm.email}. Note: ${result.error}` });
+        } else {
+          // Full success
+          setActionMessage({ type: 'success', message: `Invitation sent successfully! User will receive an email at ${inviteForm.email} with signup instructions.` });
+        }
+        setInviteForm({ email: '', fullName: '', role: 'user' });
+        setShowInviteDialog(false);
+        loadData(); // Refresh to show new invitation
+        if (activeTab === 'invitations') {
+          loadInvitations(); // Refresh invitations list
+        }
+      } else {
+        setActionMessage({ type: 'error', message: result.error || 'Failed to send invitation' });
+      }
+    } catch (error) {
+      setActionMessage({ type: 'error', message: 'An error occurred while creating user profile' });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleDeleteUser = async (userId: string) => {
+    setActionLoading(true);
+    try {
+      const result = await deleteUserSimple(userId);
+      if (result.success) {
+        setActionMessage({ type: 'success', message: 'User profile deleted successfully' });
+        setUsers(users.filter(user => user.id !== userId));
+        setShowDeleteDialog(false);
+        setSelectedUser(null);
+      } else {
+        setActionMessage({ type: 'error', message: result.error || 'Failed to delete user profile' });
+      }
+    } catch (error) {
+      setActionMessage({ type: 'error', message: 'An error occurred while deleting user profile' });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleDisableUser = async (userId: string, disabled: boolean) => {
+    setActionLoading(true);
+    try {
+      const result = await disableUserSimple(userId, disabled);
+      if (result.success) {
+        setActionMessage({ type: 'success', message: `User ${disabled ? 'disabled' : 'enabled'} successfully` });
+        setUsers(users.map(user => 
+          user.id === userId ? { ...user, is_active: !disabled } : user
+        ));
+        setShowUserDialog(false);
+      } else {
+        setActionMessage({ type: 'error', message: result.error || 'Failed to update user status' });
+      }
+    } catch (error) {
+      setActionMessage({ type: 'error', message: 'An error occurred while updating user status' });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleSendPasswordReset = async (email: string) => {
+    setActionLoading(true);
+    try {
+      const result = await sendPasswordResetEmailSimple(email);
+      if (result.success) {
+        setActionMessage({ type: 'success', message: `Password reset email sent to ${email}` });
+        setShowUserDialog(false);
+      } else {
+        setActionMessage({ type: 'error', message: result.error || 'Failed to send password reset email' });
+      }
+    } catch (error) {
+      setActionMessage({ type: 'error', message: 'An error occurred while sending password reset email' });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Clear action message after 5 seconds
+  useEffect(() => {
+    if (actionMessage) {
+      const timer = setTimeout(() => {
+        setActionMessage(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [actionMessage]);
 
   const filteredUsers = users.filter(user => {
     const matchesSearch = user.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -200,6 +359,17 @@ export default function SuperAdminDashboard({ onBack, language }: SuperAdminDash
         </div>
       </header>
 
+      {/* Action Message Display */}
+      {actionMessage && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <Alert className={actionMessage.type === 'success' ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}>
+            <AlertDescription className={actionMessage.type === 'success' ? 'text-green-800' : 'text-red-800'}>
+              {actionMessage.message}
+            </AlertDescription>
+          </Alert>
+        </div>
+      )}
+
       {/* Navigation Tabs */}
       <div className="bg-white border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -208,7 +378,8 @@ export default function SuperAdminDashboard({ onBack, language }: SuperAdminDash
               { id: 'overview', label: t.overview, icon: Activity },
               { id: 'users', label: t.users, icon: Users },
               { id: 'bookings', label: t.bookings, icon: Calendar },
-              { id: 'activity', label: t.activity, icon: Activity }
+              { id: 'activity', label: t.activity, icon: Activity },
+              { id: 'invitations', label: 'Invitations', icon: Calendar }
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -317,6 +488,13 @@ export default function SuperAdminDashboard({ onBack, language }: SuperAdminDash
                   <SelectItem value="super_admin">{t.superAdmin}</SelectItem>
                 </SelectContent>
               </Select>
+              <Button
+                onClick={() => setShowInviteDialog(true)}
+                className="flex items-center space-x-2"
+              >
+                <Plus className="h-4 w-4" />
+                <span>{t.inviteUser}</span>
+              </Button>
             </div>
 
             {/* Users Table */}
@@ -344,7 +522,7 @@ export default function SuperAdminDashboard({ onBack, language }: SuperAdminDash
                       {filteredUsers.map((user) => (
                         <TableRow key={user.id}>
                           <TableCell className="font-medium">{user.full_name}</TableCell>
-                          <TableCell>{user.email}</TableCell>
+                          <TableCell>{user.email || 'N/A'}</TableCell>
                           <TableCell>
                             <Badge className={getRoleColor(user.role)}>
                               {getRoleLabel(user.role)}
@@ -359,16 +537,45 @@ export default function SuperAdminDashboard({ onBack, language }: SuperAdminDash
                             {new Date(user.created_at).toLocaleDateString()}
                           </TableCell>
                           <TableCell>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                setSelectedUser(user);
-                                setShowUserDialog(true);
-                              }}
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
+                            <div className="flex space-x-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setSelectedUser(user);
+                                  setShowUserDialog(true);
+                                }}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleSendPasswordReset(user.email || '')}
+                                disabled={actionLoading || !user.email}
+                              >
+                                <Shield className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleDisableUser(user.id, user.is_active)}
+                                disabled={actionLoading}
+                              >
+                                {user.is_active ? 'Disable' : 'Enable'}
+                              </Button>
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => {
+                                  setSelectedUser(user);
+                                  setShowDeleteDialog(true);
+                                }}
+                                disabled={actionLoading}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -472,10 +679,108 @@ export default function SuperAdminDashboard({ onBack, language }: SuperAdminDash
             </CardContent>
           </Card>
         )}
+
+        {activeTab === 'invitations' && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Pending Invitations</CardTitle>
+              <CardDescription>
+                Manage user invitations
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-lg font-medium">Recent Invitations</h3>
+                  <Button
+                    onClick={() => setShowInviteDialog(true)}
+                    className="flex items-center space-x-2"
+                  >
+                    <Plus className="h-4 w-4" />
+                    <span>Invite User</span>
+                  </Button>
+                </div>
+                
+                <div className="border rounded-lg">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Full Name</TableHead>
+                        <TableHead>Role</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Invited By</TableHead>
+                        <TableHead>Created</TableHead>
+                        <TableHead>Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {invitationsLoading ? (
+                        <TableRow>
+                          <TableCell colSpan={7} className="text-center py-8">
+                            <div className="flex items-center justify-center space-x-2">
+                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                              <span>Loading invitations...</span>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ) : invitations.length > 0 ? (
+                        invitations.map((invitation) => (
+                          <TableRow key={invitation.id}>
+                            <TableCell>{invitation.email}</TableCell>
+                            <TableCell>{invitation.full_name}</TableCell>
+                            <TableCell>
+                              <Badge className={getRoleColor(invitation.role)}>
+                                {getRoleLabel(invitation.role)}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant={invitation.status === 'pending' ? "default" : "secondary"}>
+                                {invitation.status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>{invitation.invited_by || 'Unknown'}</TableCell>
+                            <TableCell>
+                              {new Date(invitation.created_at).toLocaleDateString()}
+                            </TableCell>
+                            <TableCell>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  // Resend invitation
+                                  resendInvitation(invitation.id);
+                                }}
+                              >
+                                Resend
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      ) : (
+                        <TableRow>
+                          <TableCell colSpan={7} className="text-center py-8">
+                            <div className="text-center">
+                          <p className="text-gray-500 mb-2">No invitations found</p>
+                          <p className="text-sm text-gray-400">Create your first invitation using the "Invite User" button above</p>
+                        </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </main>
 
       {/* User Edit Dialog */}
-      <Dialog open={showUserDialog} onOpenChange={setShowUserDialog}>
+      <Dialog open={showUserDialog} onOpenChange={(open) => {
+        setShowUserDialog(open);
+        if (!open) setActionMessage(null);
+      }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{t.editUser}</DialogTitle>
@@ -518,6 +823,115 @@ export default function SuperAdminDashboard({ onBack, language }: SuperAdminDash
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Invite User Dialog */}
+      <Dialog open={showInviteDialog} onOpenChange={(open) => {
+        setShowInviteDialog(open);
+        if (!open) setActionMessage(null);
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t.inviteUser}</DialogTitle>
+            <DialogDescription>
+              Invite a new user to the platform
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium">{t.email}</label>
+              <Input
+                type="email"
+                placeholder="user@example.com"
+                value={inviteForm.email}
+                onChange={(e) => setInviteForm({ ...inviteForm, email: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">{t.fullName}</label>
+              <Input
+                type="text"
+                placeholder="Full Name"
+                value={inviteForm.fullName}
+                onChange={(e) => setInviteForm({ ...inviteForm, fullName: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">{t.selectRole}</label>
+              <Select
+                value={inviteForm.role}
+                onValueChange={(value) => setInviteForm({ ...inviteForm, role: value as UserRole })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="user">{t.user}</SelectItem>
+                  <SelectItem value="city_owner">{t.cityOwner}</SelectItem>
+                  <SelectItem value="super_admin">{t.superAdmin}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex justify-end space-x-2">
+              <Button
+                variant="outline"
+                onClick={() => setShowInviteDialog(false)}
+                disabled={actionLoading}
+              >
+                {t.cancel}
+              </Button>
+              <Button
+                onClick={handleInviteUser}
+                disabled={actionLoading}
+                className="flex items-center space-x-2"
+              >
+                {actionLoading ? (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                ) : (
+                  <Plus className="h-4 w-4" />
+                )}
+                <span>{t.invite}</span>
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete User Confirmation Dialog */}
+      <Dialog open={showDeleteDialog} onOpenChange={(open) => {
+        setShowDeleteDialog(open);
+        if (!open) setActionMessage(null);
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t.deleteUser}</DialogTitle>
+            <DialogDescription>
+              {t.confirmDelete}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end space-x-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowDeleteDialog(false)}
+              disabled={actionLoading}
+            >
+              {t.cancel}
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => selectedUser && handleDeleteUser(selectedUser.id)}
+              disabled={actionLoading}
+              className="flex items-center space-x-2"
+            >
+              {actionLoading ? (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+              ) : (
+                <Trash2 className="h-4 w-4" />
+              )}
+              <span>{t.delete}</span>
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

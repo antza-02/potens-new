@@ -14,12 +14,15 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { LoginForm } from './components/auth/LoginForm';
 import { SignUpForm } from './components/auth/SignUpForm';
 import { getVenues, searchVenues, Venue } from './lib/database';
+import { useUserProfile } from './hooks/useUserProfile';
+
 
 const cities = ["Helsinki", "Tampere", "Turku", "Oulu", "Espoo", "Vantaa"];
 const spaceTypes = ["Sauna", "Meeting Room", "Tennis Court", "Creative Space", "Sports Hall", "Conference Room"];
 
 function AppContent() {
   const { user, loading, signOut } = useAuth();
+  const { profile, isSuperAdmin, isAdmin, loading: profileLoading } = useUserProfile();
   const [currentView, setCurrentView] = useState('home');
   const [selectedVenue, setSelectedVenue] = useState<Venue | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -226,7 +229,7 @@ function AppContent() {
                   >
                     {t.bookings}
                   </Button>
-                                                          {(user.user_metadata?.role === 'admin' || user.email === 'admin@potens.fi') && (
+                                                          {isAdmin && (
                      <Button
                        variant="outline"
                        onClick={() => setCurrentView('admin-dashboard')}
@@ -234,7 +237,7 @@ function AppContent() {
                        {t.admin}
                      </Button>
                    )}
-                   {(user.user_metadata?.role === 'super_admin' || user.email === 'superadmin@potens.fi') && (
+                   {(isSuperAdmin || user?.user_metadata?.role === 'super_admin' || user?.email === 'superadmin@potens.fi' || user?.email === 'anton.hietsilta@gmail.com') && (
                      <Button
                        variant="outline"
                        onClick={() => setCurrentView('super-admin-dashboard')}
@@ -293,7 +296,7 @@ function AppContent() {
                     >
                       {t.bookings}
                     </Button>
-                                         {(user.user_metadata?.role === 'admin' || user.email === 'admin@potens.fi') && (
+                                         {isAdmin && (
                        <Button
                          variant="outline"
                          onClick={() => {
@@ -305,7 +308,7 @@ function AppContent() {
                          {t.admin}
                        </Button>
                      )}
-                     {(user.user_metadata?.role === 'super_admin' || user.email === 'superadmin@potens.fi') && (
+                     {(isSuperAdmin || user?.user_metadata?.role === 'super_admin' || user?.email === 'superadmin@potens.fi' || user?.email === 'anton.hietsilta@gmail.com') && (
                        <Button
                          variant="outline"
                          onClick={() => {
@@ -316,7 +319,7 @@ function AppContent() {
                        >
                          Super Admin
                        </Button>
-                     )}
+                       )}
                     <Button
                       variant="outline"
                       onClick={() => {
@@ -479,6 +482,8 @@ function AppContent() {
           </div>
         </div>
       </footer>
+      
+
     </div>
   );
 }
