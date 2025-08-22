@@ -127,8 +127,7 @@ export default function SuperAdminDashboard({ onBack, language }: SuperAdminDash
       email: 'Email',
       fullName: 'Full Name',
       selectRole: 'Select Role',
-      invite: 'Invite',
-      cancel: 'Cancel'
+      invite: 'Invite'
     }
   };
 
