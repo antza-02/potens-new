@@ -7,7 +7,7 @@ import { Badge } from './ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 
-const AdminDashboard = ({ onBack, language }) => {
+const AdminDashboard = ({ onBack, language, onNavigateToCityDashboard }) => {
   const [activeTab, setActiveTab] = useState('overview');
   const [selectedVenue, setSelectedVenue] = useState(null);
   const [showAddVenue, setShowAddVenue] = useState(false);
@@ -373,7 +373,9 @@ const AdminDashboard = ({ onBack, language }) => {
                 size="sm"
                 onClick={() => {
                   // Navigate to City Dashboard
-                  window.location.href = '/city-dashboard';
+                  if (onNavigateToCityDashboard) {
+                    onNavigateToCityDashboard();
+                  }
                 }}
                 className="flex items-center space-x-2"
               >

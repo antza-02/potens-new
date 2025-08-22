@@ -10,6 +10,7 @@ import BookingFlow from './components/BookingFlow';
 import UserDashboard from './components/UserDashboard';
 import AdminDashboard from './components/AdminDashboard';
 import SuperAdminDashboard from './components/SuperAdminDashboard';
+import CityDashboardAccess from './components/CityDashboardAccess';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { LoginForm } from './components/auth/LoginForm';
 import { SignUpForm } from './components/auth/SignUpForm';
@@ -188,6 +189,7 @@ function AppContent() {
       <AdminDashboard
         onBack={() => setCurrentView('home')}
         language={language}
+        onNavigateToCityDashboard={() => setCurrentView('city-dashboard')}
       />
     );
   }
@@ -197,6 +199,18 @@ function AppContent() {
       <SuperAdminDashboard
         onBack={() => setCurrentView('home')}
         language={language}
+        onNavigateToCityDashboard={() => setCurrentView('city-dashboard')}
+      />
+    );
+  }
+
+  if (currentView === 'city-dashboard') {
+    return (
+      <CityDashboardAccess
+        userRole={isSuperAdmin ? 'super_admin' : (isAdmin ? 'city_owner' : 'user')}
+        language={language}
+        cityName="Helsinki"
+        onBack={() => setCurrentView('home')}
       />
     );
   }
@@ -243,6 +257,14 @@ function AppContent() {
                        onClick={() => setCurrentView('super-admin-dashboard')}
                      >
                        Super Admin
+                     </Button>
+                   )}
+                   {(isSuperAdmin || isAdmin) && (
+                     <Button
+                       variant="outline"
+                       onClick={() => setCurrentView('city-dashboard')}
+                     >
+                       {language === 'fi' ? 'Kaupungin Hallinta' : 'City Dashboard'}
                      </Button>
                    )}
                   <Button

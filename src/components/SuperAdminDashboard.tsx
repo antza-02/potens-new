@@ -15,6 +15,7 @@ import { sendUserInvitationSimple, getPendingInvitations, getAllInvitations, res
 interface SuperAdminDashboardProps {
   onBack: () => void;
   language: string;
+  onNavigateToCityDashboard?: () => void;
 }
 
 export default function SuperAdminDashboard({ onBack, language }: SuperAdminDashboardProps) {
@@ -60,7 +61,6 @@ export default function SuperAdminDashboard({ onBack, language }: SuperAdminDash
       save: 'Tallenna',
       cancel: 'Peruuta',
       delete: 'Poista',
-      confirmDelete: 'Oletko varma, että haluat poistaa tämän käyttäjän?',
       userUpdated: 'Käyttäjä päivitetty onnistuneesti',
       errorUpdating: 'Virhe päivitettäessä käyttäjää',
       noUsers: 'Ei käyttäjiä',
@@ -81,7 +81,6 @@ export default function SuperAdminDashboard({ onBack, language }: SuperAdminDash
       fullName: 'Koko nimi',
       selectRole: 'Valitse rooli',
       invite: 'Kutsu',
-      cancel: 'Peruuta',
       accessCityDashboard: 'Kaupungin Hallinta'
     },
     en: {
@@ -108,7 +107,6 @@ export default function SuperAdminDashboard({ onBack, language }: SuperAdminDash
       save: 'Save',
       cancel: 'Cancel',
       delete: 'Delete',
-      confirmDelete: 'Are you sure you want to delete this user?',
       userUpdated: 'User updated successfully',
       errorUpdating: 'Error updating user',
       noUsers: 'No users found',
@@ -357,7 +355,9 @@ export default function SuperAdminDashboard({ onBack, language }: SuperAdminDash
                 variant="outline"
                 onClick={() => {
                   // Navigate to City Dashboard
-                  window.location.href = '/city-dashboard';
+                  if (onNavigateToCityDashboard) {
+                    onNavigateToCityDashboard();
+                  }
                 }}
                 className="flex items-center space-x-2"
               >
