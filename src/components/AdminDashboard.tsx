@@ -46,7 +46,8 @@ const AdminDashboard = ({ onBack, language }) => {
       cancelled: "Peruutettu",
       viewDetails: "Näytä tiedot",
       manageAvailability: "Hallitse saatavuutta",
-      uploadImages: "Lataa kuvia"
+      uploadImages: "Lataa kuvia",
+      accessCityDashboard: "Kaupungin Hallinta"
     },
     en: {
       back: "Back",
@@ -81,7 +82,8 @@ const AdminDashboard = ({ onBack, language }) => {
       cancelled: "Cancelled",
       viewDetails: "View Details",
       manageAvailability: "Manage Availability",
-      uploadImages: "Upload Images"
+      uploadImages: "Upload Images",
+      accessCityDashboard: "City Dashboard"
     }
   };
 
@@ -366,6 +368,18 @@ const AdminDashboard = ({ onBack, language }) => {
             </div>
             
             <div className="flex items-center space-x-2">
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => {
+                  // Navigate to City Dashboard
+                  window.location.href = '/city-dashboard';
+                }}
+                className="flex items-center space-x-2"
+              >
+                <MapPin className="h-4 w-4 mr-2" />
+                <span>{t.accessCityDashboard}</span>
+              </Button>
               <Button variant="outline" size="sm">
                 <Settings className="h-4 w-4 mr-2" />
                 {t.settings}

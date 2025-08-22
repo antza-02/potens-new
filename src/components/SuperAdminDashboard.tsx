@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Users, Building, Calendar, Activity, Shield, Edit, Trash2, Plus, Search, Filter } from 'lucide-react';
+import { ArrowLeft, Users, Building, Calendar, Activity, Shield, Edit, Trash2, Plus, Search, Filter, MapPin } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
@@ -81,7 +81,8 @@ export default function SuperAdminDashboard({ onBack, language }: SuperAdminDash
       fullName: 'Koko nimi',
       selectRole: 'Valitse rooli',
       invite: 'Kutsu',
-      cancel: 'Peruuta'
+      cancel: 'Peruuta',
+      accessCityDashboard: 'Kaupungin Hallinta'
     },
     en: {
       title: 'Super Admin Dashboard',
@@ -127,7 +128,8 @@ export default function SuperAdminDashboard({ onBack, language }: SuperAdminDash
       email: 'Email',
       fullName: 'Full Name',
       selectRole: 'Select Role',
-      invite: 'Invite'
+      invite: 'Invite',
+      accessCityDashboard: 'City Dashboard'
     }
   };
 
@@ -349,6 +351,19 @@ export default function SuperAdminDashboard({ onBack, language }: SuperAdminDash
                 {t.back}
               </Button>
               <h1 className="text-xl font-bold text-gray-900">{t.title}</h1>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  // Navigate to City Dashboard
+                  window.location.href = '/city-dashboard';
+                }}
+                className="flex items-center space-x-2"
+              >
+                <MapPin className="h-4 w-4" />
+                <span>{t.accessCityDashboard}</span>
+              </Button>
             </div>
             <div className="flex items-center space-x-2">
               <Shield className="h-6 w-6 text-red-600" />
